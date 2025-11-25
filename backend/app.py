@@ -41,24 +41,18 @@ def home():
 
 @app.route("/prever", methods=["POST"])
 def prever():
-    global model, tokenizer, encoder
-
-    # Verifica se recursos estão carregados
-    if model is None or tokenizer is None or encoder is None:
-        return jsonify({"erro": "Modelo ainda não carregado, tente novamente em alguns segundos."}), 503
+    lazy_load_resources()  # aqui já carrega o modelo/tokenizer/encoder quando necessário
 
     data = request.get_json()
     texto = data.get("texto", "")
 
-    # Preprocessamento
-    seq = tokenizer.texts_to_sequences([texto])
-    seq_pad = np.array(seq)
     from tensorflow.keras.preprocessing.sequence import pad_sequences
-    seq_pad = pad_sequences(seq_pad, maxlen=MAX_LEN)
 
-    # Previsão
-    pred = model.predict(seq_pad)
-    classe = np.argmax(pred, axis=1)[0]
+    seq = tokenizer.texts_to_sequences([texto])
+    seq_pad = pad_sequences(seq, maxlen=MAX_LEN)
+
+    pred = predict_fn(tf.convert_to_tensor(seq_pad, dtype=tf.float32))
+    classe = np.argmax(pred.numpy(), axis=1)[0]
     categoria = encoder.inverse_transform([classe])[0]
 
     return jsonify({
