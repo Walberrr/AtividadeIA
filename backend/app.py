@@ -5,29 +5,32 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import tokenizer_from_json
 import json
 import pickle
+import os
 
-# Mesmo tamanho usado no treino
 MAX_LEN = 150
 
 app = Flask(__name__)
 
-# ===========================
-# 1. CARREGAR O MODELO
-# ===========================
-model = load_model("news_model.h5")
+# Carregamento tardio (lazy loading)
+model = None
+tokenizer = None
+encoder = None
 
-# ===========================
-# 2. CARREGAR TOKENIZER
-# ===========================
-with open("tokenizer.json", "r") as f:
-    tokenizer_data = json.load(f)
-tokenizer = tokenizer_from_json(tokenizer_data)
+def carregar_modelo():
+    global model, tokenizer, encoder
 
-# ===========================
-# 3. CARREGAR LABEL ENCODER
-# ===========================
-with open("label_encoder.pkl", "rb") as f:
-    encoder = pickle.load(f)
+    if model is None:
+        model = load_model("news_model.h5")
+
+    if tokenizer is None:
+        with open("tokenizer.json", "r", encoding="utf-8") as f:
+            tokenizer_json = f.read()
+        tokenizer = tokenizer_from_json(tokenizer_json)
+
+    if encoder is None:
+        with open("label_encoder.pkl", "rb") as f:
+            encoder = pickle.load(f)
+
 
 @app.route("/", methods=["GET"])
 def home():
@@ -35,10 +38,11 @@ def home():
 
 @app.route("/prever", methods=["POST"])
 def prever():
+    carregar_modelo()  # só carrega quando realmente precisar
+
     data = request.get_json()
     texto = data.get("texto", "")
 
-    # Preprocessamento idêntico ao treino
     seq = tokenizer.texts_to_sequences([texto])
     seq_pad = pad_sequences(seq, maxlen=MAX_LEN)
 
@@ -53,4 +57,5 @@ def prever():
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
